@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.0 20200511
+# Version v0.1.1 20200511
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.0 20200511"
+SCRIPT_VERSION="Version v0.1.1 20200511"
 
 # Funtion definition
 
@@ -118,6 +118,8 @@ function lab_scenario_1 () {
 function lab_scenario_1_validation () {
     validate_cluster_exists
     SUMMARY=0
+    echo -e "\n+++++++++++++++++++++++++++++++++++++++++++++++++++"
+    echo -e "Running validation for Lab scenario $LAB_SCENARIO\n"
 
     echo -e "\n\n========================================================"
     # number of nodes
@@ -281,7 +283,9 @@ EOF
 
 function lab_scenario_2_validation () {
     validate_cluster_exists
-    LAB_TAG="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query tags.l200lab -o tsv)"
+    LAB_TAG="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query tags.l200lab -o tsv 2>/dev/null)"
+    echo -e "\n+++++++++++++++++++++++++++++++++++++++++++++++++++"
+    echo -e "Running validation for Lab scenario $LAB_SCENARIO\n"
     if [ -z $LAB_TAG ]
     then
         echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
@@ -290,10 +294,10 @@ function lab_scenario_2_validation () {
     then
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
         RUNNING_PODS="$(kubectl get po -l app=nginx1 | grep Running | wc -l 2>/dev/null)"
-        AUTOSCALE_STATUS="$(az aks show -g aks-netflow-rg -n aks-netflow --query agentPoolProfiles[].enableAutoScaling -o tsv 2>/dev/null)"
+        AUTOSCALE_STATUS="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query agentPoolProfiles[].enableAutoScaling -o tsv 2>/dev/null)"
         if [ -z $AUTOSCALE_STATUS ]
         then
-            if [ "$AUTOSCALE_STATUS" == "true" ] && [ $RUNNING_PODS -eq to 60 ]
+            if [ "$AUTOSCALE_STATUS" == "true" ] && [ $RUNNING_PODS -eq 60 ]
             then
                 echo -e "\n\n========================================================"
                 echo -e "\nCluster looks good now, the keyword for the assesment is:\n\nimpromptu ruffle imminently\n"
@@ -301,7 +305,7 @@ function lab_scenario_2_validation () {
                 echo -e "\nScenario $LAB_SCENARIO is still FAILED\n"
             fi
         else
-            echo -e "\nScenario $LAB_SCENARIO is still FAILED\n"
+            echo -e "\nCluster autoscaler is not enabled. Scenario $LAB_SCENARIO is still FAILED\n"
         fi
     else
         echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
@@ -315,7 +319,7 @@ function lab_scenario_3 () {
     --resource-group $RESOURCE_GROUP \
     --name $CLUSTER_NAME \
     --location $LOCATION \
-    --node-count 2 \
+    --node-count 1 \
     --generate-ssh-keys \
     --tag l200lab=${LAB_SCENARIO} \
     -o table
@@ -355,6 +359,8 @@ EOF
 function lab_scenario_3_validation () {
     validate_cluster_exists
     LAB_TAG="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query tags.l200lab -o tsv)"
+    echo -e "\n+++++++++++++++++++++++++++++++++++++++++++++++++++"
+    echo -e "Running validation for Lab scenario $LAB_SCENARIO\n"
     if [ -z $LAB_TAG ]
     then
         echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
@@ -440,114 +446,6 @@ function lab_scenario_4_validation () {
         echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
         exit 6
     fi    
-}
-
-# Lab scenario 5
-function lab_scenario_5 () {
-    az aks create \
-    --resource-group $RESOURCE_GROUP \
-    --name $CLUSTER_NAME \
-    --location $LOCATION \
-    --node-count 2 \
-    --generate-ssh-keys \
-    --tag l200lab=${LAB_SCENARIO} \
-    -o table
-
-    validate_cluster_exists
-
-    az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
-    NODE_RESOURCE_GROUP="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query nodeResourceGroup -o tsv)"
-
-    echo -e "\nCompleting the lab setup..."
-
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  labels:
-    app: fe-pod
-  name: fe-pod-svc
-spec:
-  ports:
-  - port: 8080
-    protocol: TCP
-    targetPort: 8080
-  selector:
-    app: fe-pod
-status:
-  loadBalancer: {}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: be-pod
-  labels:
-    app: be-pod
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: be-pod
-  template:
-    metadata:
-      labels:
-        app: be-pod
-    spec:
-      containers:
-      - name: be-pod
-        imagePullPolicy: Always
-        image: sturrent/be-pod:latest
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: fe-pod
-  labels:
-    app: fe-pod
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: fe-pod
-  template:
-    metadata:
-      labels:
-        app: fe-pod
-    spec:
-      containers:
-      - name: fe-pod
-        imagePullPolicy: Always
-        image: sturrent/fe-pod:latest
-        ports:
-        - containerPort: 8080
-EOF
-
-    echo -e "\n\n========================================================"
-    CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv)"
-    echo -e "\n\nCluster has two deployments fe-pod and be-pod. The pod on be-pod is sending data to pod in fe-pod over port 8080."
-    echo -e "The data is beeing send every 5 seconds and it has the secret phrase in plain text. Setup a capture on the fe-pod and analyse the tcp stream to get the secret phrase."
-    echo -e "Hint: you can use something like https://github.com/eldadru/ksniff to caputer the traffic and analyse the tcp stream with Wireshark.\n"
-    echo -e "\nCluster uri == ${CLUSTER_URI}\n"
-}
-
-function lab_scenario_5_validation () {
-    validate_cluster_exists
-    LAB_TAG="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query tags.l200lab -o tsv)"
-    if [ -z $LAB_TAG ]
-    then
-        echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
-        exit 6
-    elif [ $LAB_TAG -eq $LAB_SCENARIO ]
-    then
-        az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
-        echo -e "\n\n========================================================"
-        echo -e "\n\nCluster has two deployments fe-pod and be-pod. The pod on be-pod is sending data to pod in fe-pod over port 8080."
-        echo -e "The data is beeing send every 5 seconds and it has the secret phrase in plain text. Setup a capture on the fe-pod and analyse the tcp stream to get the secret phrase."
-        echo -e "Hint: you can use something like https://github.com/eldadru/ksniff to caputer the traffic and analyse the tcp stream with Wireshark.\n"
-    else
-        echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
-        exit 6
-    fi
 }
 
 #if -h | --help option is selected usage will be displayed
