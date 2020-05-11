@@ -295,7 +295,7 @@ function lab_scenario_2_validation () {
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
         RUNNING_PODS="$(kubectl get po -l app=nginx1 | grep Running | wc -l 2>/dev/null)"
         AUTOSCALE_STATUS="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query agentPoolProfiles[].enableAutoScaling -o tsv 2>/dev/null)"
-        if [ -z $AUTOSCALE_STATUS ]
+        if [ -n $AUTOSCALE_STATUS ]
         then
             if [ "$AUTOSCALE_STATUS" == "true" ] && [ $RUNNING_PODS -eq 60 ]
             then
