@@ -330,12 +330,11 @@ function lab_scenario_3 () {
     SP_ID=$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query servicePrincipalProfile.clientId -o tsv 2>/dev/null)
     SP_SECRET="$(az ad sp credential reset --name $SP_ID --query password -o tsv 2>/dev/null)"
     NEXT_VERSION="$(az aks get-upgrades -g $RESOURCE_GROUP -n $CLUSTER_NAME --query controlPlaneProfile.upgrades[].kubernetesVersion -o tsv 2>/dev/null)"
-    az aks upgrade -g $RESOURCE_GROUP -n $CLUSTER_NAME -k $NEXT_VERSION --control-plane-only -y 2>/dev/null
 
     NODE_RESOURCE_GROUP="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query nodeResourceGroup -o tsv)"
     CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv)"
     echo -e "\n\n********************************************************"
-    echo -e "\nCluster upgrade attempt has failed..."
+    echo -e "\nCluster $CLUSTER_NAME has to be upgraded to version $NEXT_VERSION. Upgrade the cluster to version $NEXT_VERSION and fix any issue that might block the upgrade."
     echo -e "\nCluster uri == ${CLUSTER_URI}\n"
 }
 
@@ -357,7 +356,7 @@ function lab_scenario_3_validation () {
         if [ $CLUSTER_STATUS == "Succeeded" ] && [[ "$BASE_VERSION" < "$CLUSTER_VERSION" ]]
         then
             echo -e "\n\n========================================================"
-            echo -e "\nCluster looks good now, the keyword for the assesment is:\n\nAll Greek To Me\n"
+            echo -e "\nCluster looks good now, the keyword for the assesment is:\n\nfeminism whip harmlessly\n"
         else
             echo -e "\nScenario $LAB_SCENARIO is still FAILED\n"
         fi
@@ -423,7 +422,7 @@ function lab_scenario_4_validation () {
         if $(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query provisioningState -o tsv | grep -q "Succeeded") && $(kubectl get no | grep -q " Ready ")
         then
             echo -e "\n\n========================================================"
-            echo -e "\nCluster looks good now, the keyword for the assesment is:\n\nA Piece of Cake\n"
+            echo -e "\nCluster looks good now, the keyword for the assesment is:\n\namethyst acquiescence tacitly\n"
         else
             echo -e "\nScenario $LAB_SCENARIO is still FAILED\n"
         fi
