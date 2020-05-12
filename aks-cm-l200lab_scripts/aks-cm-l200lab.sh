@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.1 20200511
+# Version v0.1.1 20200512
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.1 20200511"
+SCRIPT_VERSION="Version v0.1.1 20200512"
 
 # Funtion definition
 
@@ -207,7 +207,7 @@ function lab_scenario_2 () {
     --name $VNET_NAME \
     --address-prefixes 10.0.0.0/16 \
     --subnet-name $SUBNET_NAME \
-    --subnet-prefix 10.0.0.0/25
+    --subnet-prefix 10.0.0.0/25 \
     -o table &>/dev/null
     
     SUBNET_ID=$(az network vnet subnet list \
@@ -327,32 +327,15 @@ function lab_scenario_3 () {
     validate_cluster_exists
 
     az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
+    SP_ID=$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query servicePrincipalProfile.clientId -o tsv 2>/dev/null)
+    SP_SECRET="$(az ad sp credential reset --name $SP_ID --query password -o tsv 2>/dev/null)"
+    NEXT_VERSION="$(az aks get-upgrades -g $RESOURCE_GROUP -n $CLUSTER_NAME --query controlPlaneProfile.upgrades[].kubernetesVersion -o tsv 2>/dev/null)"
+    az aks upgrade -g $RESOURCE_GROUP -n $CLUSTER_NAME -k $NEXT_VERSION --control-plane-only -y 2>/dev/null
 
-    az network public-ip create -g $RESOURCE_GROUP -n l200lab-testip --allocation-method Static --sku Standard --location $LOCATION -o table
-    PUBLIC_IP="$(az network public-ip show -g $RESOURCE_GROUP -n l200lab-testip --query ipAddress -o tsv)"
     NODE_RESOURCE_GROUP="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query nodeResourceGroup -o tsv)"
-
-## LB issues
-cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: Service
-metadata:
-  annotations:
-    service.beta.kubernetes.io/azure-load-balancer-resource-group: $NODE_RESOURCE_GROUP
-  name: azure-load-balancer
-  namespace: kube-system
-spec:
-  loadBalancerIP: $PUBLIC_IP
-  type: LoadBalancer
-  ports:
-  - port: 80
-  selector:
-    app: azure-load-balancer
-EOF
-
     CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv)"
     echo -e "\n\n********************************************************"
-    echo -e "\nCluster has a service called azure-load-balancer in pending state on the kube-system namespace..."
+    echo -e "\nCluster upgrade attempt has failed..."
     echo -e "\nCluster uri == ${CLUSTER_URI}\n"
 }
 
@@ -368,8 +351,10 @@ function lab_scenario_3_validation () {
     elif [ $LAB_TAG -eq $LAB_SCENARIO ]
     then
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
-        PUBLIC_IP="$(az network public-ip show -g $RESOURCE_GROUP -n l200lab-testip --query ipAddress -o tsv)"
-        if ! $(kubectl -n kube-system get svc azure-load-balancer | grep -q '<pending>') && $(kubectl -n kube-system get svc azure-load-balancer | grep -q $PUBLIC_IP)
+        CLUSTER_STATUS="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query provisioningState -o tsv 2>/dev/null)"
+        CLUSTER_VERSION="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query kubernetesVersion -o tsv 2>/dev/null)"
+        BASE_VERSION="$(az aks get-versions -l eastus2 -o yaml | awk '/^- default: true/{flag=1; next} /upgrades:/{flag=0} flag' | grep orchestratorVersion: | awk '{print $2}' 2>/dev/null)"
+        if [ $CLUSTER_STATUS == "Succeeded" ] && [[ "$BASE_VERSION" < "$CLUSTER_VERSION" ]]
         then
             echo -e "\n\n========================================================"
             echo -e "\nCluster looks good now, the keyword for the assesment is:\n\nAll Greek To Me\n"
