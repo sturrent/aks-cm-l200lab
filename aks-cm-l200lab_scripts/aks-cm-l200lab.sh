@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.3 20200513
+# Version v0.1.4 20200513
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.3 20200513"
+SCRIPT_VERSION="Version v0.1.4 20200513"
 
 # Funtion definition
 
@@ -141,12 +141,12 @@ function lab_scenario_1_validation () {
         let "++SUMMARY"
     fi
     # VM type
-    STATUS5="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query networkProfile.networkPolicy -o tsv 2>/dev/null)"
+    STATUS5="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query agentPoolProfiles[].type -o tsv -o tsv 2>/dev/null)"
     if [ $STATUS5 == "AvailabilitySet" ]
     then
-        echo "VM type = $STATUS7 -- Succeeded"
+        echo "VM type = $STATUS5 -- Succeeded"
     else
-        echo "VM type = $STATUS7 -- Failed"
+        echo "VM type = $STATUS5 -- Failed"
         let "++SUMMARY"
     fi
     # Max Pods
