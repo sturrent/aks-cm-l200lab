@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.2 20200512
+# Version v0.1.3 20200513
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.2 20200512"
+SCRIPT_VERSION="Version v0.1.3 20200513"
 
 # Funtion definition
 
@@ -329,12 +329,13 @@ function lab_scenario_3 () {
     az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
     SP_ID=$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query servicePrincipalProfile.clientId -o tsv 2>/dev/null)
     SP_SECRET="$(az ad sp credential reset --name $SP_ID --query password -o tsv 2>/dev/null)"
+    CLUSTER_VERSION="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query kubernetesVersion -o tsv 2>/dev/null)"
     NEXT_VERSION="$(az aks get-upgrades -g $RESOURCE_GROUP -n $CLUSTER_NAME --query controlPlaneProfile.upgrades[].kubernetesVersion -o tsv 2>/dev/null)"
 
     NODE_RESOURCE_GROUP="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query nodeResourceGroup -o tsv)"
     CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv)"
     echo -e "\n\n********************************************************"
-    echo -e "\nCluster $CLUSTER_NAME has to be upgraded to version $NEXT_VERSION. Upgrade the cluster to version $NEXT_VERSION and fix any issue that might block the upgrade."
+    echo -e "\nCluster $CLUSTER_NAME has been deployed with version $CLUSTER_VERSION. Upgrade the cluster to the version $NEXT_VERSION and fix any issue that might block the upgrade."
     echo -e "\nCluster uri == ${CLUSTER_URI}\n"
 }
 
@@ -368,50 +369,62 @@ function lab_scenario_3_validation () {
 
 # Lab scenario 4
 function lab_scenario_4 () {
-    VNET_NAME="${RESOURCE_GROUP}_vnet"
-    SUBNET_NAME="${RESOURCE_GROUP}_subnet"
-    az network vnet create \
-        --resource-group $RESOURCE_GROUP \
-        --name $VNET_NAME \
-        --address-prefixes 192.168.0.0/16 \
-        --dns-servers 172.20.50.2 \
-        --subnet-name $SUBNET_NAME \
-        --subnet-prefix 192.168.100.0/24 \
-        -o table &>/dev/null
-        
-        SUBNET_ID=$(az network vnet subnet list \
-        --resource-group $RESOURCE_GROUP \
-        --vnet-name $VNET_NAME \
-        --query [].id --output tsv)
-
-        az aks create \
-        --resource-group $RESOURCE_GROUP \
-        --name $CLUSTER_NAME \
-        --location $LOCATION \
-        --kubernetes-version 1.15.7 \
-        --node-count 2 \
-        --node-osdisk-size 100 \
-        --network-plugin azure \
-        --service-cidr 10.0.0.0/16 \
-        --dns-service-ip 10.0.0.10 \
-        --docker-bridge-address 172.17.0.1/16 \
-        --vnet-subnet-id $SUBNET_ID \
-        --generate-ssh-keys \
-        --tag l200lab=${LAB_SCENARIO} \
-        -o table
+    az aks create \
+    --resource-group $RESOURCE_GROUP \
+    --name $CLUSTER_NAME \
+    --location $LOCATION \
+    --node-count 1 \
+    --generate-ssh-keys \
+    --tag l200lab=${LAB_SCENARIO} \
+    -o table
 
     validate_cluster_exists
     az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
 
-    CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv)"
+cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slow-start
+  labels:
+    app: slow-start
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: slow-start
+  template:
+    metadata:
+      labels:
+        app: slow-start
+    spec:
+      containers:
+      - name: slow-start
+        image: sturrent/slow-start:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          exec:
+            command:
+            - cat
+            - /tmp/healthy
+          initialDelaySeconds: 1
+          periodSeconds: 5
+EOF
+
+    CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv 2>/dev/null)"
     echo -e "\n\n********************************************************"
-    echo -e "\nLab environment is ready. Cluster deployment failed, looks like an issue with VM custom script extention...\n"
+    echo -e "\nCluster has deployment \"slow-start\" that is running pods that keep restarting"
+    echo -e "The owner of the image used in the deployment is saying the app take 120 seconds to fully start,"
+    echo -e "but he is not sure how to update the deployment to account for that."
+    echo -e "You have to update the deployment in order to allow the app to fully start before it gets killed by the liveness probe."
     echo -e "\nCluster uri == ${CLUSTER_URI}\n"
 }
 
 function lab_scenario_4_validation () {
     validate_cluster_exists
     LAB_TAG="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query tags.l200lab -o tsv)"
+    echo -e "\n+++++++++++++++++++++++++++++++++++++++++++++++++++"
+    echo -e "Running validation for Lab scenario $LAB_SCENARIO\n"
     if [ -z $LAB_TAG ]
     then
         echo -e "\nError: Cluster $CLUSTER_NAME in resource group $RESOURCE_GROUP was not created with this tool for lab $LAB_SCENARIO and cannot be validated...\n"
@@ -419,7 +432,7 @@ function lab_scenario_4_validation () {
     elif [ $LAB_TAG -eq $LAB_SCENARIO ]
     then
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
-        if $(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query provisioningState -o tsv | grep -q "Succeeded") && $(kubectl get no | grep -q " Ready ")
+        if [ $(kubectl get po -l app=slow-start | grep Running | wc -l) -eq 2 ] && [ $(kubectl get deploy slow-start -o yaml | grep initialDelaySeconds: | awk '{print $2}') -ge 120 ]
         then
             echo -e "\n\n========================================================"
             echo -e "\nCluster looks good now, the keyword for the assesment is:\n\namethyst acquiescence tacitly\n"
@@ -441,7 +454,7 @@ then
 *\t 1. Deploy AKS cluster with the specified setup
 *\t 2. Cluster autoscaler enabled but not working
 *\t 3. Cluster upgraded failed
-*\t 4. 
+*\t 4. Pods from deployment keep restarting
 ***************************************************************\n"
     echo -e '"-g|--resource-group" resource group name
 "-n|--name" AKS cluster name
@@ -479,7 +492,7 @@ if [ -z $LAB_SCENARIO ]; then
 *\t 1. Deploy AKS cluster with the specified setup
 *\t 2. Cluster autoscaler enabled but not working
 *\t 3. Cluster upgraded failed
-*\t 4. 
+*\t 4. Pods from deployment keep restarting
 ***************************************************************\n"
 	exit 9
 fi

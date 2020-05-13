@@ -24,7 +24,7 @@ Here is the list of current labs available:
 *        1. Deploy AKS cluster with the specified setup
 *        2. Cluster autoscaler enabled but not working
 *        3. Cluster upgrade failed
-*        4. 
+*        4. Pods from deployment keep restarting
 ***************************************************************
 
 "-g|--resource-group" resource group name
