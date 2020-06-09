@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.4 20200513
+# Version v0.1.5 20200609
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.4 20200513"
+SCRIPT_VERSION="Version v0.1.5 20200609"
 
 # Funtion definition
 
@@ -200,8 +200,6 @@ function lab_scenario_2 () {
     VNET_NAME=aks-vnet-autoscalelab
     SUBNET_NAME=aks-subnet-autoscalelab
 
-    az group create --name $RESOURCE_GROUP --location $LOCATION
-
     az network vnet create \
     --resource-group $RESOURCE_GROUP \
     --name $VNET_NAME \
@@ -210,10 +208,10 @@ function lab_scenario_2 () {
     --subnet-prefix 10.0.0.0/25 \
     -o table &>/dev/null
     
-    SUBNET_ID=$(az network vnet subnet list \
+    SUBNET_ID="$(az network vnet subnet list \
     --resource-group $RESOURCE_GROUP \
     --vnet-name $VNET_NAME \
-    --query [].id --output tsv 2>/dev/null)
+    --query [].id --output tsv 2>/dev/null)"
 
     az aks create \
     --resource-group $RESOURCE_GROUP \
@@ -223,7 +221,6 @@ function lab_scenario_2 () {
     --enable-cluster-autoscaler \
     --min-count 1 \
     --max-count 5 \
-    --cluster-autoscaler-profile scan-interval=30s \
     --network-plugin azure \
     --service-cidr 10.2.0.0/16 \
     --dns-service-ip 10.2.0.10 \
@@ -231,6 +228,7 @@ function lab_scenario_2 () {
     --vnet-subnet-id $SUBNET_ID \
     --generate-ssh-keys \
     --tag l200lab=${LAB_SCENARIO} \
+    --generate-ssh-keys \
     -o table
 
     validate_cluster_exists
