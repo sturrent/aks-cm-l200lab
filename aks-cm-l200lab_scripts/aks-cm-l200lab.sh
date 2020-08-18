@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.5 20200609
+# Version v0.1.6 20200818
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.5 20200609"
+SCRIPT_VERSION="Version v0.1.6 20200818"
 
 # Funtion definition
 
@@ -412,7 +412,7 @@ EOF
     CLUSTER_URI="$(az aks show -g $RESOURCE_GROUP -n $CLUSTER_NAME --query id -o tsv 2>/dev/null)"
     echo -e "\n\n********************************************************"
     echo -e "\nCluster has deployment \"slow-start\" that is running pods that keep restarting"
-    echo -e "The owner of the image used in the deployment is saying the app take 120 seconds to fully start,"
+    echo -e "The owner of the image used in the deployment is saying the app takes 120 seconds to fully start,"
     echo -e "but he is not sure how to update the deployment to account for that."
     echo -e "You have to update the deployment in order to allow the app to fully start before it gets killed by the liveness probe."
     echo -e "\nCluster uri == ${CLUSTER_URI}\n"
@@ -430,6 +430,12 @@ function lab_scenario_4_validation () {
     elif [ $LAB_TAG -eq $LAB_SCENARIO ]
     then
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
+        INITIAL_DELAY=$(kubectl get deploy slow-start -o yaml | grep initialDelaySeconds: | awk '{print $2}')
+        if [ -z $INITIAL_DELAY ]
+        then
+            echo -e "\nLiveness probe initial delay is missing. Scenario $LAB_SCENARIO is still FAILED\n"
+            exit 0
+        fi
         if [ $(kubectl get po -l app=slow-start | grep Running | wc -l) -eq 2 ] && [ $(kubectl get deploy slow-start -o yaml | grep initialDelaySeconds: | awk '{print $2}') -ge 120 ]
         then
             echo -e "\n\n========================================================"
