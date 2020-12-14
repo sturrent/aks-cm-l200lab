@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.7 20201214
+# Version v0.1.8 20201214
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.7 20201214"
+SCRIPT_VERSION="Version v0.1.8 20201214"
 
 # Funtion definition
 
