@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # script name: aks-cm-l200lab.sh
-# Version v0.1.6 20200818
+# Version v0.1.7 20201214
 # Set of tools to deploy L200 Azure containers labs
 
 # "-g|--resource-group" resource group name
@@ -55,7 +55,7 @@ done
 # Variable definition
 SCRIPT_PATH="$( cd "$(dirname "$0")" ; pwd -P )"
 SCRIPT_NAME="$(echo $0 | sed 's|\.\/||g')"
-SCRIPT_VERSION="Version v0.1.6 20200818"
+SCRIPT_VERSION="Version v0.1.7 20201214"
 
 # Funtion definition
 
@@ -430,13 +430,13 @@ function lab_scenario_4_validation () {
     elif [ $LAB_TAG -eq $LAB_SCENARIO ]
     then
         az aks get-credentials -g $RESOURCE_GROUP -n $CLUSTER_NAME --overwrite-existing &>/dev/null
-        INITIAL_DELAY=$(kubectl get deploy slow-start -o yaml | grep initialDelaySeconds: | awk '{print $2}')
+        INITIAL_DELAY=$(kubectl get deploy slow-start -o yaml | grep ' initialDelaySeconds:' | awk '{print $2}')
         if [ -z $INITIAL_DELAY ]
         then
             echo -e "\nLiveness probe initial delay is missing. Scenario $LAB_SCENARIO is still FAILED\n"
             exit 0
         fi
-        if [ $(kubectl get po -l app=slow-start | grep Running | wc -l) -eq 2 ] && [ $(kubectl get deploy slow-start -o yaml | grep initialDelaySeconds: | awk '{print $2}') -ge 120 ]
+        if [ $(kubectl get po -l app=slow-start | grep Running | wc -l) -eq 2 ] && [ $(kubectl get deploy slow-start -o yaml | grep ' initialDelaySeconds:' | awk '{print $2}') -ge 120 ]
         then
             echo -e "\n\n========================================================"
             echo -e "\nCluster looks good now, the keyword for the assesment is:\n\namethyst acquiescence tacitly\n"
